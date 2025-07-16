@@ -1,1 +1,21 @@
-# azyon
+<div align="center">
+
+<pre>
+      .o.                                                    
+     .888.                                                   
+    .8"888.       oooooooo oooo    ooo  .ooooo.  ooo. .oo.   
+   .8' `888.     d'""7d8P   `88.  .8'  d88' `88b `888P"Y88b  
+  .88ooo8888.      .d8P'     `88..8'   888   888  888   888  
+ .8'     `888.   .d8P'  .P    `888'    888   888  888   888  
+o88o     o8888o d8888888P      .8'     `Y8bod8P' o888o o888o 
+                           .o..P'                            
+                           `Y8P'                             
+</pre>
+
+### Azyon Code Editor
+### A small but powerful terminal code editor.
+
+---
+# IN DEVELOPMENT, EXPECT BUGS AND ERRORS
+
+</div>
