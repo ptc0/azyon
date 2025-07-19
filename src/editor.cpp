@@ -68,6 +68,14 @@ void moveCursor(EditorState& ed, int dx, int dy) {
     ed.cursorX += dx;
     if (ed.cursorX < 0) ed.cursorX = 0;
     if (ed.cursorX > (int)line.size()) ed.cursorX = line.size();
+
+    // SCROLLING:
+    const int screenRows = 24 - 2;  // Adjust if terminal height changes dynamically
+    if (ed.cursorY < ed.rowOffset) {
+        ed.rowOffset = ed.cursorY;
+    } else if (ed.cursorY >= ed.rowOffset + screenRows) {
+        ed.rowOffset = ed.cursorY - screenRows + 1;
+    }
 }
 
 size_t saveFile(const EditorState& ed) {

@@ -18,6 +18,6 @@ $(TARGET): $(OBJECTS)
 	$(CXX) $(CXXFLAGS) $(LUA_CFLAGS) -c $< -o $@
 
 clean:
-	rm -f $(OBJECTS) $(TARGET)
+	rm -f $(OBJECTS)
 
 rebuild: clean all

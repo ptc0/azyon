@@ -29,7 +29,7 @@ void clearScreen() {
 }
 
 void drawMenuBar(const EditorState &ed, int width, const string& message = "") {
-    cout << "\033[7m"; // inverted colors
+    cout << "\033[7m";
     string title = ed.currentFile.empty() ? "Welcome!" : ed.currentFile;
     string pos = " Ln " + to_string(ed.cursorY) + ", Col " + to_string(ed.cursorX);
     string line = " Azyon - " + title + pos;
@@ -40,14 +40,17 @@ void drawMenuBar(const EditorState &ed, int width, const string& message = "") {
 
     if ((int)line.size() < width) line += string(width - line.size(), ' ');
     cout << line.substr(0, width);
-    cout << "\033[0m\n"; // reset colors
+    cout << "\033[0m\n";
 }
 
 void drawBuffer(const EditorState &ed, int width, int height) {
-    for (int i = 0; i < height - 2; ++i) {
-        cout << "\033[K"; // clear line
-        if (i < (int)ed.buffer.size()) {
-            string line = ed.buffer[i];
+    int screenRows = height - 2;
+
+    for (int i = 0; i < screenRows; ++i) {
+        int fileRow = i + ed.rowOffset;
+        cout << "\033[K";
+        if (fileRow < (int)ed.buffer.size()) {
+            string line = ed.buffer[fileRow];
             if ((int)line.size() > width)
                 line = line.substr(0, width);
             cout << line;
@@ -59,13 +62,29 @@ void drawBuffer(const EditorState &ed, int width, int height) {
 }
 
 void drawFileTree(int width, int height, int selectedIndex, const vector<fs::directory_entry> &entries) {
+    const int margin = 2; // left padding
     for (int i = 0; i < height - 2 && i < (int)entries.size(); ++i) {
-        if (i == selectedIndex) cout << "\033[7m"; // highlight
-        cout << "\033[K"; // clear line
+        if (i == selectedIndex) cout << "\033[7m";
+        cout << "\033[K";
+
         const auto& e = entries[i];
-        string prefix = e.is_directory() ? "[D] " : "    ";
-        string name = e.path().filename().string();
-        string line = prefix + name;
+        string prefix;
+        string name;
+
+        if (i == 0 && e.path().filename() != e.path()) {
+            // ".." entry
+            prefix = " 🗀 ";
+            name = "..";
+        } else if (e.is_directory()) {
+            prefix = " 🗀 ";
+            name = e.path().filename().string();
+        } else {
+            prefix = " 📄 ";
+            name = e.path().filename().string();
+        }
+
+        string line = string(margin, ' ') + prefix + name;
+
         if ((int)line.size() > width)
             line = line.substr(0, width);
         cout << line;
@@ -82,7 +101,6 @@ int main(int argc, char *argv[]) {
     registerLuaFunctions(editor.L, &editor);
     loadLuaPlugins(editor);
 
-    // Parse command line args
     bool debugMode = false;
     string fileToOpen = "";
     for (int i = 1; i < argc; i++) {
@@ -95,7 +113,6 @@ int main(int argc, char *argv[]) {
     }
 
     if (!fileToOpen.empty()) {
-        // Try to load file if exists, else start empty with that filename
         if (filesystem::exists(fileToOpen)) {
             loadFile(editor, fileToOpen);
         } else {
@@ -107,7 +124,6 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    // Load welcome text from file
     ifstream wfile("WELCOMESPLASH");
     string welcomeText;
     if (wfile) {
@@ -136,23 +152,39 @@ int main(int argc, char *argv[]) {
     bool showFileTree = false;
     int fileTreeSelected = 0;
     vector<filesystem::directory_entry> entries;
+    fs::path currentDirectory = fs::current_path();
 
-    auto collectEntries = [&](const filesystem::path& p) {
+    auto collectEntries = [&](const filesystem::path& path) {
         entries.clear();
-        function<void(const filesystem::path&, int)> listDir = [&](const filesystem::path& path, int depth) {
-            for (auto& entry : filesystem::directory_iterator(path)) {
-                if (entry.path().filename().string()[0] == '.') continue; // Skip hidden files
-                entries.push_back(entry);
-                if (entry.is_directory())
-                    listDir(entry.path(), depth + 1);
+        vector<filesystem::directory_entry> tempEntries;
+
+        // Add ".." manually as first entry
+        if (path.has_parent_path()) {
+            entries.push_back(fs::directory_entry(path.parent_path()));
+        }
+
+        try {
+            for (const auto& entry : fs::directory_iterator(path)) {
+                tempEntries.push_back(entry);
             }
-        };
-        listDir(p, 0);
+
+            sort(tempEntries.begin(), tempEntries.end(), [](const auto& a, const auto& b) {
+                if (a.is_directory() != b.is_directory())
+                    return a.is_directory();
+                return a.path().filename().string() < b.path().filename().string();
+            });
+
+            entries.insert(entries.end(), tempEntries.begin(), tempEntries.end());
+        } catch (const filesystem::filesystem_error& e) {
+            if (debugMode) {
+                cerr << "[Directory Error] " << e.what() << "\n";
+            }
+        }
     };
 
     if (showWelcome && welcomeText.empty()) {
         showFileTree = true;
-        collectEntries(filesystem::current_path());
+        collectEntries(currentDirectory);
     }
 
     string saveMessage = "";
@@ -176,8 +208,31 @@ int main(int argc, char *argv[]) {
                 drawFileTree(termWidth, termHeight, fileTreeSelected, entries);
             } else {
                 if (!welcomeText.empty()) {
-                    cout << welcomeText << "\n";
-                    cout << "Press CTRL + ENTER to open file browser, to navigate CTRL + <arrow> or ENTER\n";
+                    vector<string> lines;
+                    string line;
+                    istringstream stream(welcomeText);
+                    size_t maxLineLength = 0;
+
+                    while (getline(stream, line)) {
+                        lines.push_back(line);
+                        if (line.length() > maxLineLength)
+                            maxLineLength = line.length();
+                    }
+
+                    string instructions = "Press CTRL + ENTER to open file browser, to navigate CTRL + <arrow> or ENTER";
+                    lines.push_back("");
+                    lines.push_back(instructions);
+
+                    int totalLines = lines.size();
+                    int verticalPadding = max(0, (termHeight - totalLines) / 2);
+
+                    for (int i = 0; i < verticalPadding; ++i)
+                        cout << "\n";
+
+                    for (const auto& l : lines) {
+                        int padding = max(0, (termWidth - (int)l.length()) / 2);
+                        cout << string(padding, ' ') << l << "\n";
+                    }
                 } else {
                     cout << "Splash file is missing! Please fix ASAP.\n\n";
                     cout << "Press CTRL + ENTER to open file browser\n";
@@ -185,31 +240,55 @@ int main(int argc, char *argv[]) {
             }
         } else {
             drawBuffer(editor, termWidth, termHeight);
-            cout << "\033[" << (editor.cursorY + 1) << ";" << (editor.cursorX + 1) << "H";
+            cout << "\033[" << (editor.cursorY + 2) << ";" << (editor.cursorX + 1) << "H";
         }
 
         cout.flush();
 
         int c = readKey();
 
-        if (c == 27) {  // ESC clears and exits
-            clearScreen();
-            break;
+        if (c == 27) {  // ESC
+            if (!showWelcome) {
+                cout << "\nDo you want to save changes before returning to file browser? (y/n): ";
+                cout.flush();
+                char response;
+                cin >> response;
+                if (response == 'y' || response == 'Y') {
+                    if (!editor.currentFile.empty()) {
+                        size_t bytes = saveFile(editor);
+                        saveMessage = "[ Saved " + to_string(bytes) + " bytes successfully ]";
+                        showSaveMessage = true;
+                        saveMessageTime = chrono::steady_clock::now();
+                    }
+                }
+                showWelcome = true;
+                showFileTree = true;
+                collectEntries(currentDirectory);
+                fileTreeSelected = 0;
+                continue;
+            } else {
+                continue; // ESC in file browser does nothing
+            }
         }
 
         if (editor.L) {
             callLuaFunction(editor.L, "onKeyPress", c);
         }
 
-        if (showWelcome) {
-            if (showFileTree) {
-                if (c == ARROW_UP && fileTreeSelected > 0) fileTreeSelected--;
-                else if (c == ARROW_DOWN && fileTreeSelected + 1 < (int)entries.size()) fileTreeSelected++;
-                else if (c == '\n') {
+        if (showWelcome && showFileTree) {
+            switch (c) {
+                case ARROW_UP:
+                    if (fileTreeSelected > 0) fileTreeSelected--;
+                    break;
+                case ARROW_DOWN:
+                    if (fileTreeSelected + 1 < (int)entries.size()) fileTreeSelected++;
+                    break;
+                case '\n':
                     if (!entries.empty() && fileTreeSelected < (int)entries.size()) {
-                        auto &selected = entries[fileTreeSelected];
+                        const auto& selected = entries[fileTreeSelected];
                         if (selected.is_directory()) {
-                            collectEntries(selected.path());
+                            currentDirectory = selected.path();
+                            collectEntries(currentDirectory);
                             fileTreeSelected = 0;
                         } else {
                             loadFile(editor, selected.path().string());
@@ -220,13 +299,9 @@ int main(int argc, char *argv[]) {
                             clearScreen();
                         }
                     }
-                }
-            } else {
-                if (c == '\n') {
-                    showFileTree = true;
-                    collectEntries(filesystem::current_path());
-                    fileTreeSelected = 0;
-                }
+                    break;
+                default:
+                    break; // Ignore other keys (e.g. Ctrl+Arrow)
             }
         } else {
             if (c == ARROW_UP) moveCursor(editor, 0, -1);
@@ -238,12 +313,11 @@ int main(int argc, char *argv[]) {
             else if (c == 19) { // Ctrl+S
                 if (!editor.currentFile.empty()) {
                     size_t bytes = saveFile(editor);
-                    saveMessage = "[ Saved " + to_string(bytes) + " bytes sucessfully ]";
+                    saveMessage = "[ Saved " + to_string(bytes) + " bytes successfully ]";
                     showSaveMessage = true;
                     saveMessageTime = chrono::steady_clock::now();
                 }
-            }
-            else if (c >= 32 && c < 127) insertChar(editor, (char)c);
+            } else if (c >= 32 && c < 127) insertChar(editor, (char)c);
         }
     }
 
@@ -253,6 +327,6 @@ int main(int argc, char *argv[]) {
         lua_close(editor.L);
         editor.L = nullptr;
     }
-    
+
     return 0;
 }

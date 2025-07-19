@@ -9,6 +9,7 @@ struct EditorState {
     std::vector<std::string> buffer;
     int cursorX;
     int cursorY;
+    int rowOffset = 0;
     std::string currentFile;
 
     lua_State* L;  // Add this for Lua state pointer

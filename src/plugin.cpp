@@ -4,8 +4,6 @@
 
 static EditorState* globalEd = nullptr; // To be set from main
 
-// C++ functions exposed to Lua
-
 static int lua_getCursorX(lua_State* L) {
     lua_pushinteger(L, globalEd->cursorX);
     return 1;

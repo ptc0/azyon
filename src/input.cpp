@@ -49,12 +49,13 @@ int readKey() {
     return c;
 }
 
-#else // Unix / Linux / macOS
+#else
 
 #include <termios.h>
 #include <unistd.h>
 #include <iostream>
 #include <string>
+#include "input.h"
 
 static struct termios orig_termios;
 
