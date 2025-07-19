@@ -1,3 +1,4 @@
 src/azyon
 src/plugins/*
 src/*.o
+.vscode/*
