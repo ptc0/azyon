@@ -8,11 +8,21 @@ on:
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout repository
+      uses: actions/checkout@v4
 
-    - name: Make
-      run: cd src && make
+    - name: Install Lua 5.4 and development headers
+      run: |
+        sudo apt update
+        sudo apt install -y lua5.4 liblua5.4-dev g++ make
+
+    - name: Initialize submodules (e.g., LuaBridge if used)
+      run: git submodule update --init --recursive
+
+    - name: Build project with Makefile
+      run: |
+        cd src
+        make
